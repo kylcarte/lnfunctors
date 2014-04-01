@@ -1,45 +1,29 @@
+{-# LANGUAGE ConstrainedClassMethods #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PolyKinds #-}
 
 module Data.LnFunctor.Apply where
 
 import Data.LnFunctor
-import Data.IxFunctor.Apply (IxApply)
-import qualified Data.IxFunctor.Apply as I
 
-type LnApply m = WithLink IxApply m
-type ApplyLinks m ijs = Links IxApply m ijs
+class LnFunctor m => LnApply m where
+  lap :: WithLink m j k (m i j (a -> b) -> m k l a -> m i l b)
 
-{-
-class IxFunctor m => IxApply m where
-  iap    :: m i j (a -> b) -> m j k a -> m i k b
+lthenL :: LnApply m => WithLink m j k (m i j a -> m k l b -> m i l a)
+lthenL ljk = lliftA2 ljk const
 
-ithenL :: IxApply m => m i j a -> m j k b -> m i k a
-ithenL = iliftA2 const
+lthenR :: LnApply m => WithLink m j k (m i j a -> m k l b -> m i l b)
+lthenR ljk = lliftA2 ljk (const id)
 
-ithenR :: IxApply m => m i j a -> m j k b -> m i k b
-ithenR = iliftA2 (const id)
+lliftA :: LnApply m => (a -> b) -> m i j a -> m i j b
+lliftA = (<$$>)
 
-(<**>) :: IxApply m => m i j (a -> b) -> m j k a -> m i k b
-(<**>) = iap
-infixl 4 <**>
+lliftA2 :: LnApply m => WithLink m j k
+  ((a -> b -> c) -> m i j a -> m k l b -> m i l c)
+lliftA2 ljk f = lap ljk . imap f
 
-(<**) :: IxApply m => m i j a -> m j k b -> m i k a
-(<**) = ithenL
-infixl 4 <**
-
-(**>) :: IxApply m => m i j a -> m j k b -> m i k b
-(**>) = ithenR
-infixl 4 **>
-
-iliftA :: IxApply m => (a -> b) -> m i j a -> m i j b
-iliftA = (<$$>)
-
-iliftA2 :: IxApply m => (a -> b -> c) -> m i j a -> m j k b -> m i k c
-iliftA2 f a b = f <$$> a <**> b
-
-iliftA3 :: IxApply m => (a -> b -> c -> d)
-  -> m i j a -> m j k b -> m k l c -> m i l d
-iliftA3 f a b c = f <$$> a <**> b <**> c
--}
+lliftA3 :: LnApply f => WithLinks f '[ '(j,k) , '(l,m) ]
+  ((a -> b -> c -> d) -> f i j a -> f k l b -> f m n c -> f i n d)
+lliftA3 ljk llm f a = lap llm . lap ljk (imap f a)
 
