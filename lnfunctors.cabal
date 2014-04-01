@@ -1,0 +1,42 @@
+
+name:                lnfunctors
+version:             0.1.0.0
+-- synopsis:            
+-- description:         
+license:             BSD3
+license-file:        LICENSE
+-- author:              
+maintainer:          kcarter@galois.com
+-- copyright:           
+-- category:            
+build-type:          Simple
+-- extra-source-files:  
+cabal-version:       >=1.10
+
+library
+  exposed-modules:     Data.LnFunctor
+                       Data.LnFunctor.Empty
+                       -- ->
+                       Data.LnFunctor.Pointed
+                       Data.LnFunctor.Apply
+                       Data.LnFunctor.Alt
+                       Data.LnFunctor.Bind
+                       Data.LnFunctor.Plus
+                       -- <-
+                       Data.LnFunctor.Copointed
+                       Data.LnFunctor.Coapply
+                       Data.LnFunctor.Coalt
+                       Data.LnFunctor.Extend
+                       Data.LnFunctor.Minus
+                       --
+                       Control.LnApplicative
+                       Control.LnMonad
+                       Control.LnCoapplicative
+                       Control.LnComonad
+  -- other-modules:       
+  -- other-extensions:    
+  build-depends:       base -any,
+                       ixfunctors -any
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+
