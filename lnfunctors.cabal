@@ -15,10 +15,11 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.LnFunctor
+                       -- Data.Links
                        -- Data.LnFunctor.Empty
                        -- -- ->
                        -- Data.LnFunctor.Pointed
-                       Data.LnFunctor.Apply
+                       -- Data.LnFunctor.Apply
                        -- Data.LnFunctor.Alt
                        -- Data.LnFunctor.Bind
                        -- Data.LnFunctor.Plus
@@ -34,10 +35,13 @@ library
                        -- Control.LnMonad.Reader
                        -- Control.LnCoapplicative
                        -- Control.LnComonad
+                       -- Data.HList
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base -any,
-                       ixfunctors -any
+                       ixfunctors -any,
+                       reflection -any,
+                       tagged -any
   hs-source-dirs:      src
   default-language:    Haskell2010
 
