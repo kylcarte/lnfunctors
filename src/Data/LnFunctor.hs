@@ -1,78 +1,137 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ConstrainedClassMethods #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module Data.LnFunctor where
+module Data.LnFunctor
+  ( module Data.LnFunctor
+  , IxFunctor(..)
+  ) where
 
-import Data.IxFunctor         (IxFunctor (..))
-import Data.IxFunctor.Apply   (IxApply   (..))
-import Data.IxFunctor.Empty   (IxEmpty   (..))
-import Data.IxFunctor.Alt     (IxAlt     (..))
-import Data.IxFunctor.Pointed (IxPointed (..))
-import Data.IxFunctor.Bind    (IxBind    (..))
-import Data.IxFunctor.Copointed (IxCopointed (..))
+import Prelude hiding ((>>=),(>>))
+import Data.Proxy
+import Type.Families
+import GHC.Exts (IsList(..))
 
-import GHC.Exts (Constraint)
+-- Class Constraints {{{
 
-type FunctorLink f i j = (LnFunctor f, Link f i j)
 type Rfl
-  (c :: (ix -> ix -> * -> *) -> ix -> ix -> k)
-  (f ::  ix -> ix -> * -> *)
-  (i ::  ix)
-  = (c f i i :: k)
+  (c :: k -> ix -> ix -> l)
+  (f :: k)
+  (i :: ix)
+  = c f i i
 
-class LnFunctor f => LnInitial (f :: ix -> ix -> * -> *) where
-  type Init f :: ix -> ix -> Constraint
+type Rfl2
+  (c :: k -> ix -> ix -> ix -> ix -> l)
+  (f :: k)
+  (i :: ix)
+  (j :: ix)
+  = c f i j i j
+
+type Rfl4
+  (c :: k -> ix -> ix -> ix -> ix -> l)
+  (f :: k)
+  (i :: ix)
+  = c f i i i i
+
+type Trn
+  (c :: l -> ix -> ix -> ix -> ix -> m)
+  (f :: l)
+  (i :: ix)
+  (j :: ix)
+  (k :: ix)
+  = c f i j j k
+
+type Sym
+  (c :: k -> ix -> ix -> Constraint)
+  (f :: k)
+  (i :: ix)
+  (j :: ix)
+  = ((c f i j, c f j i) :: Constraint)
+
+class LnFunctor f => LnInitial  (f :: ix -> ix -> * -> *) where
+  type Init f (i :: ix) (j :: ix) :: Constraint
 class LnFunctor f => LnTerminal (f :: ix -> ix -> * -> *) where
-  type Term f :: ix -> ix -> Constraint
+  type Term f (i :: ix) (j :: ix) :: Constraint
 
 class LnFunctor f => LnJoin (f :: ix -> ix -> * -> *) where
-  type GatherUp   f :: ix -> ix -> Constraint
-  type GatherDown f :: ix -> ix -> Constraint
+  type GatherUp   f (i :: ix) (j :: ix) :: Constraint
+  type GatherDown f (i :: ix) (j :: ix) :: Constraint
 class LnFunctor f => LnSplit (f :: ix -> ix -> * -> *) where
-  type UpSplit   f :: ix -> ix -> Constraint
-  type DownSplit f :: ix -> ix -> Constraint
+  type SplitUp    f (i :: ix) (j :: ix) :: Constraint
+  type SplitDown  f (i :: ix) (j :: ix) :: Constraint
+
+type Links  f i j k l = (LinkPar f i j k l,LinkSeq f i j k l)
+type family LinkPar (f :: ix -> ix -> * -> *) (i :: ix) (j :: ix) (k :: ix) (l :: ix) where
+  LinkPar f i j k l = (LinkL f i k,LinkR f j l)
+type family LinkSeq (f :: ix -> ix -> * -> *) (i :: ix) (j :: ix) (k :: ix) (l :: ix) where
+  LinkSeq f i j k l = LinkI f j k
+
+-- }}}
 
 -- Functor {{{
 
-class LnFunctor (f :: ix -> ix -> * -> *) where
-  type Link f :: ix -> ix -> Constraint
-  weaken     :: Link f i j => f j k a -> f i k a
-  strengthen :: Link f j k => f i j a -> f i k a
-  stretch    :: (Link f i j, Link f k l) => f j k a -> f i l a
-  stretch = strengthen . weaken
-  -- mapping under LnFunctor, generalized from IxFunctor 'imap'
-  lmap :: Link f i j => (a -> b) -> f j k a -> f i k b
-  lmap = lmapWeaken
-  -- map with weaken
-  lmapWeaken :: Link f i j => (a -> b) -> f j k a -> f i k b
-  default lmapWeaken :: (IxFunctor f, Link f i j)
-    => (a -> b) -> f j k a -> f i k b
-  lmapWeaken f = weaken . imap f
-  -- map with strengthen
-  lmapStrengthen :: Link f j k => (a -> b) -> f i j a -> f i k b
-  default lmapStrengthen :: (IxFunctor f, Link f j k)
-    => (a -> b) -> f i j a -> f i k b
-  lmapStrengthen f = strengthen . imap f
+-- Index Restricted {{{
 
-(<$$>) :: (LnFunctor f, Rfl Link f i) => (a -> b) -> f i j a -> f i j b
+class IxFunctor f where
+  imap :: (a -> b) -> f i j a -> f i j b
+
+(<$>) :: IxFunctor f => (a -> b) -> f i j a -> f i j b
+(<$>) = imap
+infixl 4 <$>
+
+(<$) :: IxFunctor f => a -> f i j b -> f i j a
+a <$ f = const a <$> f
+infixl 4 <$
+
+($>) :: IxFunctor f => f i j b -> a -> f i j a
+($>) = flip (<$)
+infixl 4 $>
+
+ivoid :: IxFunctor f => f i j a -> f i j ()
+ivoid = (() <$)
+
+-- }}}
+
+-- minimum definition: Link*, weaken and strengthen
+class IxFunctor f => LnFunctor (f :: ix -> ix -> * -> *) where
+  type LinkL f (i :: ix) (j :: ix) :: Constraint
+  type LinkR f (i :: ix) (j :: ix) :: Constraint
+  type LinkI f (i :: ix) (j :: ix) :: Constraint
+  weaken     :: LinkL f i j => f i k a -> f j k a
+  strengthen :: LinkR f i j => f k i a -> f k j a
+  stretch    :: LinkPar f i j k l => f i j a -> f k l a
+  stretch = strengthen . weaken
+  lmap  :: LinkPar f i j k l => (a -> b) -> f i j a -> f k l b
+  lmap  f = stretch . imap f
+  -- lmap constraining right indices to be equal
+  lmapL :: LinkL f i j => (a -> b) -> f i k a -> f j k b
+  lmapL f = weaken . imap f
+  -- lmap constraining left indices to be equal
+  lmapR :: LinkR f j k => (a -> b) -> f i j a -> f i k b
+  lmapR f = strengthen . imap f
+
+(<$$>) :: (LnFunctor f, Links f i j k l) => (a -> b) -> f i j a -> f k l b
 (<$$>) = lmap
 infixl 4 <$$>
 
-(<$$) :: (LnFunctor f, Rfl Link f i) => a -> f i j b -> f i j a
+(<$$) :: (LnFunctor f, Links f i j k l) => a -> f i j b -> f k l a
 a <$$ f = const a <$$> f
 infixl 4 <$$
 
-($$>) :: (LnFunctor f, Rfl Link f i) => f i j b -> a -> f i j a
+($$>) :: (LnFunctor f, Links f i j k l) => f i j b -> a -> f k l a
 ($$>) = flip (<$$)
+infixl 4 $$>
 
-lvoid :: (LnFunctor f, Rfl Link f i) => f i j a -> f i j ()
+lvoid :: (LnFunctor f, Links f i j k l) => f i j a -> f k l ()
 lvoid = (() <$$)
 
 -- }}}
@@ -81,12 +140,10 @@ lvoid = (() <$$)
 
 class (LnFunctor f, LnInitial f) => LnEmpty f where
   lempty :: Init f i j => f i j a
-  default lempty :: (IxEmpty f, Link f i j, Init f i j)
-    => f i j a
-  lempty = weaken $ iempty
 
-rempty :: (LnEmpty f, Rfl Init f i) => f i i a
-rempty = lempty
+iempty :: (LnEmpty f, Rfl Init f i)
+  => f i i a
+iempty = lempty
 
 -- }}}
 
@@ -94,56 +151,72 @@ rempty = lempty
 
 class (LnFunctor m, LnInitial m) => LnPointed (m :: ix -> ix -> * -> *) where
   lreturn :: Init m i j => a -> m i j a
-  default lreturn :: (IxPointed m, Link m i j, Init m i j)
-    => a -> m i j a
-  lreturn = weaken . ireturn
 
-rreturn :: (LnPointed m, Rfl Init m i)
-  => a -> m i i a
-rreturn = lreturn
+ireturn :: (LnPointed m, Rfl Init m i) => a -> m i i a
+ireturn = lreturn
 
 -- }}}
 
 -- Apply {{{
 
+-- Index Restricted {{{
+
+iap :: (LnApply m, Trn Links m i j k) => m i j (a -> b) -> m j k a -> m i k b
+iap = lap
+
+(<*>) :: (LnApply m, Trn Links m i j k)
+  => m i j (a -> b) -> m j k a -> m i k b
+(<*>) = iap
+infixl 4 <*>
+
+iliftA :: LnApply m => (a -> b) -> m i j a -> m i j b
+iliftA = imap
+
+iliftA2 :: (LnApply m, Trn Links m i j k)
+  => (a -> b -> c) -> m i j a -> m j k b -> m i k c
+iliftA2 f a b = f <$> a <*> b
+
+iliftA3 :: (LnApply m, Trn Links m i j k, Trn Links m i k l)
+  => (a -> b -> c -> d) -> m i j a -> m j k b -> m k l c -> m i l d
+iliftA3 f a b c = f <$> a <*> b <*> c
+
+-- }}}
+
 class LnFunctor m => LnApply m where
-  lap :: Link m j k => m i j (a -> b) -> m k l a -> m i l b
-  default lap :: (IxApply m, Link m j k)
-    => m i j (a -> b) -> m k l a -> m i l b
-  lap f = iap f . weaken
+  lap :: (LinkL m i k, LinkR m j l, LinkI m j k) =>
+    m i j (a -> b) -> m k l a -> m i l b
 
-rliftA :: (LnApply m, Rfl Link m i)
-  => (a -> b) -> m i j a -> m i j b
-rliftA = (<$$>)
-
-(<**>) :: (LnApply m, Link m j k)
+(<**>) :: (LnApply m, Links m i j k l)
   => m i j (a -> b) -> m k l a -> m i l b
 (<**>) = lap
 infixl 4 <**>
 
-rliftA2 :: (LnApply m, Link m j k, Rfl Link m i)
-  => (a -> b -> c) -> m i j a -> m k l b -> m i l c
-rliftA2 f a b = f <$$> a <**> b
+lliftA  :: (LnApply m, Links m i j k l) => (a -> b) -> m i j a -> m k l b
+lliftA = lmap
 
-rliftA3 :: (LnApply m, Link m j k, Link m l n, Rfl Link m i)
+lliftA2 :: (LnApply m, Links m i j k l)
+  => (a -> b -> c) -> m i j a -> m k l b -> m i l c
+lliftA2 f a b = f <$> a <**> b
+
+lliftA3 :: (LnApply m,Links m i j k l,Links m i l n o)
   => (a -> b -> c -> d)
   -> m i j a -> m k l b -> m n o c -> m i o d
-rliftA3 f a b c = f <$$> a <**> b <**> c
+lliftA3 f a b c = f <$> a <**> b <**> c
 
-rthenL :: (LnApply m, Link m j k, Rfl Link m i)
+rthenL :: (LnApply m, Links m i j k l)
   => m i j a -> m k l b -> m i l a
-rthenL = rliftA2 const
+rthenL = lliftA2 const
 
-rthenR :: (LnApply m, Link m j k, Rfl Link m i)
+rthenR :: (LnApply m, Links m i j k l)
   => m i j a -> m k l b -> m i l b
-rthenR = rliftA2 (const id)
+rthenR = lliftA2 (const id)
 
-(<**) :: (LnApply m, Link m j k, Rfl Link m i)
+(<**) :: (LnApply m, Links m i j k l)
   => m i j a -> m k l b -> m i l a
 (<**) = rthenL
 infixl 4 <**
 
-(**>) :: (LnApply m, Link m j k, Rfl Link m i)
+(**>) :: (LnApply m, Links m i j k l)
   => m i j a -> m k l b -> m i l b
 (**>) = rthenR
 infixl 4 **>
@@ -152,58 +225,95 @@ infixl 4 **>
 
 -- Alt {{{
 
+-- Index Restricted {{{
+
+(<|>) :: (LnAlt m, Rfl GatherUp m i) => m i j a -> m i j a -> m i j a
+(<|>) = lbranchL
+
+(>|<) :: (LnAlt m, Rfl GatherDown m j) => m i j a -> m i j a -> m i j a
+(>|<) = lfunnelL
+
+-- }}}
+
 class (LnFunctor m, LnJoin m) => LnAlt m where
   lbranchL :: GatherUp m i j => m i k a -> m j k a -> m i k a
-  default lbranchL :: (IxAlt m, Link m i j, GatherUp m i j) => m i k a -> m j k a -> m i k a
-  lbranchL m1 m2 = ialt m1 (weaken m2)
-
   lbranchR :: GatherUp m i j => m i k a -> m j k a -> m j k a
-  default lbranchR :: (IxAlt m, Link m j i, GatherUp m i j) => m i k a -> m j k a -> m j k a
-  lbranchR m1 m2 = ialt (weaken m1) m2
-
   lfunnelL :: GatherDown m j k => m i j a -> m i k a -> m i j a
-  default lfunnelL :: (IxAlt m, Link m k j, GatherDown m j k) => m i j a -> m i k a -> m i j a
-  lfunnelL m1 m2 = ialt m1 (strengthen m2)
-
   lfunnelR :: GatherDown m j k => m i j a -> m i k a -> m i k a
-  default lfunnelR :: (IxAlt m, Link m j k, GatherDown m j k) => m i j a -> m i k a -> m i k a
-  lfunnelR m1 m2 = ialt (strengthen m1) m2
 
-(<||>) :: (LnAlt m, Rfl GatherUp m i) => m i j a -> m i j a -> m i j a
-(<||>) = lbranchL
+(<<|>) :: (LnAlt m,GatherUp m i j) => m i k a -> m j k a -> m i k a
+(<<|>) = lbranchL
+infixl 3 <<|>
+
+(<|>>) :: (LnAlt m,GatherUp m i j) => m i k a -> m j k a -> m j k a
+(<|>>) = lbranchR
+infixl 3 <|>>
+
+(>>|<) :: (LnAlt m, GatherDown m j k) => m i j a -> m i k a -> m i j a
+(>>|<) = lfunnelL
+infixl 3 >>|<
+
+(>|<<) :: (LnAlt m, GatherDown m j k) => m i j a -> m i k a -> m i k a
+(>|<<) = lfunnelR
+infixl 3 >|<<
 
 -- }}}
 
 -- Bind {{{
 
+-- Index Restricted {{{
+
+ibind :: (LnBind m, Trn Links m i j k) => m i j a -> (a -> m j k b) -> m i k b
+ibind = lbind
+
+ijoin :: (LnBind m, Trn Links m i j k) => m i j (m j k a) -> m i k a
+ijoin = ljoin
+
+(>>=) :: (LnBind m, Trn Links m i j k) => m i j a -> (a -> m j k b) -> m i k b
+(>>=) = ibind
+infixl 1 >>=
+
+(=<<) :: (LnBind m, Trn Links m i j k) => (a -> m j k b) -> m i j a -> m i k b
+(=<<) = flip (>>=)
+infixr 1 =<<
+
+(>>) :: (LnBind m, Trn Links m i j k) => m i j a -> m j k b -> m i k b
+m1 >> m2 = m1 >>= const m2
+infixl 1 >>
+
+(>=>) :: (LnBind m, Trn Links m i j k) => (a -> m i j b) -> (b -> m j k c) -> a -> m i k c
+(f >=> g) x = f x >>= g
+infixr 1 >=>
+
+(<=<) :: (LnBind m, Trn Links m i j k) => (b -> m j k c) -> (a -> m i j b) -> a -> m i k c
+(f <=< g) x = g x >>= f
+infixr 1 <=<
+
+-- }}}
+
 class LnApply m => LnBind m where
-  lbind :: Link m j k => m i j a -> (a -> m k l b) -> m i l b
-  default lbind :: (IxBind m, Link m j k) => m i j a -> (a -> m k l b) -> m i l b
-  lbind m f = ibind m $ weaken . f
+  lbind :: Links m i j k l => m i j a -> (a -> m k l b) -> m i l b
 
-rbind :: (LnBind m, Rfl Link m j) => m i j a -> (a -> m j k b) -> m i k b
-rbind = lbind
-
-ljoin :: (LnBind m, Link m j k) => m i j (m k l a) -> m i l a
+ljoin :: (LnBind m, Links m i j k l) => m i j (m k l a) -> m i l a
 ljoin = flip lbind id
 
-(>>>=) :: (LnBind m, Link m j k) => m i j a -> (a -> m k l b) -> m i l b
+(>>>=) :: (LnBind m, Links m i j k l) => m i j a -> (a -> m k l b) -> m i l b
 (>>>=) = lbind
-infixr 1 >>>=
+infixl 1 >>>=
 
-(=<<<) :: (LnBind m, Link m j k) => (a -> m k l b) -> m i j a -> m i l b
+(=<<<) :: (LnBind m, Links m i j k l) => (a -> m k l b) -> m i j a -> m i l b
 (=<<<) = flip (>>>=)
-infixl 1 =<<<
+infixr 1 =<<<
 
-(>>>) :: (LnBind m, Link m j k) => m i j a -> m k l b -> m i l b
+(>>>) :: (LnBind m, Links m i j k l) => m i j a -> m k l b -> m i l b
 m1 >>> m2 = m1 >>>= const m2
 infixl 1 >>>
 
-(>>=>) :: (LnBind m, Link m j k) => (a -> m i j b) -> (b -> m k l c) -> a -> m i l c
+(>>=>) :: (LnBind m, Links m i j k l) => (a -> m i j b) -> (b -> m k l c) -> a -> m i l c
 (f >>=> g) x = f x >>>= g
 infixr 1 >>=>
 
-(<=<<) :: (LnBind m, Link m j k) => (b -> m k l c) -> (a -> m i j b) -> a -> m i l c
+(<=<<) :: (LnBind m, Links m i j k l) => (b -> m k l c) -> (a -> m i j b) -> a -> m i l c
 (f <=<< g) x = g x >>>= f
 infixr 1 <=<<
 
@@ -211,50 +321,217 @@ infixr 1 <=<<
 
 -- Monad {{{
 
-type LnMonad  m = (LnPointed m, LnBind m)
+-- Index Restricted {{{
 
-strengthenM :: (LnMonad m, Link m j k, Rfl Init m k)
-  => m i j b -> m i k b
-strengthenM = (>>>= rreturn)
+iliftM :: LnMonad m => (a -> b) -> m i j a -> m i j b
+iliftM = iliftA
 
-lapLnMonad :: (LnMonad m, Link m j k, Rfl Link m l, Rfl Init m l)
-  => m i j (a -> b) -> m k l a -> m i l b
-lapLnMonad f x =
-  f >>>= \f' ->
-  x >>>= \x' ->
-  rreturn $ f' x'
+iliftM2 :: (LnMonad m, Trn Links m i j k) => (a -> b -> c) -> m i j a -> m j k b -> m i k c
+iliftM2 = iliftA2
 
-rliftM :: (LnMonad m, Rfl Link m i) => (a -> b) -> m i j a -> m i j b
-rliftM = rliftA
-
-rliftM2 :: (LnMonad m, Rfl Link m i, Rfl Link m j) => (a -> b -> c) -> m i j a -> m j k b -> m i k c
-rliftM2 = rliftA2
-
-rliftM3 :: (LnMonad m, Rfl Link m i, Rfl Link m j, Rfl Link m k) => (a -> b -> c -> d)
+iliftM3 :: (LnMonad m, Trn Links m i j k, Trn Links m i k l) => (a -> b -> c -> d)
   -> m i j a -> m j k b -> m k l c -> m i l d
-rliftM3 = rliftA3
+iliftM3 = iliftA3
 
-rsequence :: (LnMonad m, Rfl Link m i, Rfl Init m i) => [m i i a] -> m i i [a]
-rsequence = foldr (rliftM2 (:)) $ rreturn []
+isequence :: (LnMonad m, Rfl4 Links m i, Rfl Init m i) => [m i i a] -> m i i [a]
+isequence = foldr (iliftM2 (:)) $ ireturn []
 
-rmapM :: (LnMonad m, Rfl Link m i, Rfl Init m i) => (a -> m i i b) -> [a] -> m i i [b]
-rmapM f = rsequence . map f
+imapM :: (LnMonad m, Rfl4 Links m i, Rfl Init m i) => (a -> m i i b) -> [a] -> m i i [b]
+imapM f = isequence . map f
 
-rsequence_ :: (LnMonad m, Rfl Link m i, Rfl Init m i) => [m i i a] -> m i i ()
-rsequence_ = foldr (>>>) $ rreturn ()
+isequence_ :: (LnMonad m, Rfl4 Links m i, Rfl Init m i) => [m i i a] -> m i i ()
+isequence_ = foldr (>>) $ ireturn ()
 
-rmapM_ :: (LnMonad m, Rfl Link m i, Rfl Init m i) => (a -> m i i b) -> [a] -> m i i ()
-rmapM_ f = rsequence_ . map f
+imapM_ :: (LnMonad m, Rfl4 Links m i, Rfl Init m i) => (a -> m i i b) -> [a] -> m i i ()
+imapM_ f = isequence_ . map f
 
 -- }}}
+
+type LnMonad  m = (LnPointed m, LnBind m)
+
+lliftM :: (LnMonad m, Links m i j k l) => (a -> b) -> m i j a -> m k l b
+lliftM = lliftA
+
+lliftM2 :: (LnMonad m, Links m i j k l) => (a -> b -> c) -> m i j a -> m k l b -> m i l c
+lliftM2 = lliftA2
+
+lliftM3 :: (LnMonad m, Links m i j k l, Links m i l n o) => (a -> b -> c -> d)
+  -> m i j a -> m k l b -> m n o c -> m i o d
+lliftM3 = lliftA3
+
+{-
+tsequence :: (LnMonad m, Init m i lst) => TrList m mt i j lst is a -> m i lst [a]
+tsequence (tl :: TrList m mt i j lst is a) = case tl of
+  NilL     -> lreturn []
+  OneL mij -> imap (:[]) mij
+  ConsL (mij :: m i j a) (tl' :: TrList m mt j k lst is' a) -> mij >>= \a -> mas >>= \as -> ireturn (a : as)
+    where
+    mas :: m j lst [a]
+    mas = tsequence tl'
+
+data TrList (m :: ix -> ix -> * -> *) (empty :: Bool) (i :: ix) (j :: ix) (lst :: ix) (is :: [Pr ix ix]) :: * -> * where
+  NilL  :: TrList m True i j j '[] a
+  OneL  :: (Init m j j, LinkR m j j) => m i j a -> TrList m False i j j '[i:*:j] a
+  ConsL :: (Trn Links m i j k, Init m lst lst, Links m i j lst lst, Init m j lst, Links m j lst lst lst)
+    => m i j a -> TrList m False j k lst is a -> TrList m False i j lst (i:*:j ': is) a
+
+l0 :: TrList TrivLn True i j j '[] a
+l0 = NilL
+-}
+
+{-
+
+-- Transitively Linked List {{{
+
+tsequence :: (LnMonad m) => TrList m i j lst is a -> m i lst [a]
+tsequence tl = case tl of
+  NilL          -> lreturn []
+  ConsL mij ls' -> mij >>= \a ->
+    tsequence ls' >>= \as ->
+    ireturn (a:as)
+
+data TrList (m :: ix -> ix -> * -> *) (i :: ix) (j :: ix) (lst :: ix) (is :: [ix]) :: * -> * where
+  NilL  :: TrList m i i i '[i] a
+  ConsL :: (Trn Links m i j k, Trn Links m j lst lst, LinkR m j lst) => m i j a -> TrList m j k lst is a -> TrList m i j lst (i ': is) a
+
+l0 :: TrList TrivLn A A A '[A] ()
+l0 = NilL
+
+l1 :: TrList TrivLn A B B '[A,B] ()
+l1 = ConsL m1 NilL
+
+l2 :: TrList TrivLn A B C '[A,B,C] ()
+l2 = ConsL m1 $ ConsL m2 NilL
+
+l3 :: TrList TrivLn A B D '[A,B,C,D] ()
+l3 = ConsL m1 $ ConsL m2 $ ConsL m3 NilL
+
+m1 :: TrivLn A B ()
+m1 = lreturn ()
+
+m2 :: TrivLn B C ()
+m2 = lreturn ()
+
+m3 :: TrivLn C D ()
+m3 = lreturn ()
+
+-- }}}
+
+-}
+
+-- }}}
+
+{-
 
 -- Copointed {{{
 
 class (LnFunctor w, LnTerminal w) => LnCopointed (w :: ix -> ix -> * -> *) where
   lextract :: Term w i j => w i j a -> a
-  default lextract :: (IxCopointed w, Link w j i, Term w i j)
-    => w i j a -> a
-  lextract = iextract . weaken
+
+-- }}}
+
+
+-- Old Class Constraints {{{
+
+-- , LinkOuter  f ls
+-- , LinkGen    f ls
+-- , LinkEnds   f ls
+
+{-
+type family LinkBounds f ls where
+  LinkBounds f ls = (LinkOuter f ls, LinkEnds f ls)
+-}
+
+{-
+type family LinkGen (f :: ix -> ix -> * -> *) (ls :: [Pr ix ix]) :: Constraint where
+  LinkGen f  (i:*:j ': k:*:l ': ls )
+    = ( LinkG   f i j k l
+      , LinkGen f (k:*:l ': ls)
+      )
+  LinkGen f ls = ()
+-}
+
+{-
+type family LinkOuter (f :: ix -> ix -> * -> *) (ls :: [Pr ix ix]) :: Constraint where
+  LinkOuter f  (i:*:j ': k:*:l ': ls )
+    = ( LinkO     f i l
+      , LinkOuter f (k:*:l ': ls)
+      )
+  LinkOuter f ls = ()
+-}
+
+{-
+type family LinkEnds (f :: ix -> ix -> * -> *) (ls :: [Pr ix ix]) :: Constraint where
+  LinkEnds f '[]              = ()
+  LinkEnds f (i:*:j ': ls ) = LinkEnds_ f i (i:*:j ': ls )
+type family LinkEnds_ (f :: ix -> ix -> * -> *) (i :: ix) (ls :: [Pr ix ix]) :: Constraint where
+  LinkEnds_ f i '[j:*:k ]           = LinkE f i k
+  LinkEnds_ f i ( p ': l:*:m ': ls ) = LinkEnds_ f i (l:*:m ': ls)
+  LinkEnds_ f i ls                    = ()
+-}
+
+-- }}}
+
+-}
+
+-- Test {{{
+
+data TrivLn (i :: Index) (j :: Index) a = Trv
+  { runTrivLn :: a
+  } deriving (Eq,Show)
+
+data Index = A | B | C | D | E | F deriving (Eq,Show)
+
+instance IxFunctor TrivLn where
+  imap f (Trv a) = Trv $ f a
+
+instance LnFunctor TrivLn where
+  type LinkL TrivLn i j = TrivL i j
+  type LinkR TrivLn i j = TrivR i j
+  type LinkI TrivLn i j = TrivI i j
+  weaken (Trv a) = Trv a
+  strengthen (Trv a) = Trv a
+
+instance LnInitial TrivLn where
+  type Init TrivLn i j = ()
+
+instance LnPointed TrivLn where
+  lreturn a = Trv a
+
+instance LnApply TrivLn where
+  lap (Trv f) (Trv a) = Trv $ f a
+
+instance LnBind TrivLn where
+  lbind (Trv a) f = case f a of
+    Trv a -> Trv a
+
+data Tag
+  = TLeft
+  | TRight
+  | TInner
+  deriving (Eq,Show)
+
+class TrivL (i :: Index) (j :: Index) where
+  trivL :: Proxy (TLeft:*:i:*:j)
+  trivL = Proxy
+
+class TrivR (i :: Index) (j :: Index) where
+  trivR :: Proxy (TRight:*:i:*:j)
+  trivR = Proxy
+
+class TrivI (i :: Index) (j :: Index) where
+  trivI :: Proxy (TInner:*:i:*:j)
+  trivI = Proxy
+
+{-
+class TrivInit (i :: Index) (j :: Index) where
+  trivInit :: Proxy (TInit:*:i:*:j)
+  trivInit = Proxy
+-}
+
+instance TrivL i j
+instance TrivR i j
+instance TrivI i j
 
 -- }}}
 

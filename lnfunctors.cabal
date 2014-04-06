@@ -15,6 +15,9 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.LnFunctor
+                       Type.Families
+                       Control.LnMonad.Reader
+                       Control.LnMonad.Writer
                        -- Data.Links
                        -- Data.LnFunctor.Empty
                        -- -- ->
@@ -38,10 +41,7 @@ library
                        -- Data.HList
   -- other-modules:       
   -- other-extensions:    
-  build-depends:       base -any,
-                       ixfunctors -any,
-                       reflection -any,
-                       tagged -any
+  build-depends:       base -any
   hs-source-dirs:      src
   default-language:    Haskell2010
 

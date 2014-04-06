@@ -64,13 +64,13 @@ data LinkList (f :: ix -> ix -> * -> *) (i :: ix) (j :: ix) (x :: N) where
 -- LinkMap {{{
 
 data LinkMap (f :: ix -> ix -> * -> *) (ls :: [((ix,ix),N)]) where
-  -- NilM  :: LinkMap f '[]
+  NilM  :: LinkMap f '[]
   ConsM :: LinkList f i j n -> LinkMap f ls -> LinkMap f ( '( '(i,j) , n) ': ls )
 
 type family InsertMap (i :: ix) (j :: ix) (ls :: [((ix,ix),N)]) :: [((ix,ix),N)] where
   InsertMap i j '[]                      = '[ '( '(i,j) , S Z ) ]
-  InsertMap i j ( '( '(i,j) , x ) ': ls) = ( '( '(i,j) , S x ) ': ls )
-  InsertMap i j ( '( '(k,l) , x ) ': ls) = ( '( '(k,l) ,   x ) ': InsertMap i j ls )
+  InsertMap i j ( '( '(i,j) , x ) ': ls) =  ( '( '(i,j) , S x ) ': ls )
+  InsertMap i j ( '( '(k,l) , x ) ': ls) =  ( '( '(k,l) ,   x ) ': InsertMap i j ls )
 
 intoMap :: Link f i j -> LinkMap f ls -> LinkMap f (InsertMap i j ls)
 intoMap = undefined
