@@ -466,6 +466,18 @@ instance (In a bs, Sub as bs) => Sub (a ': as) bs where
 
 -- }}}
 
+-- Rearrange {{{
+
+type Rearrange as bs = (IsSub as bs, IsSub bs as)
+
+rearrange :: forall as bs. Rearrange as bs => List as -> List bs
+rearrange as = case subProof pbs as of
+  SubProof bs -> bs
+  where
+  pbs = Proxy :: Proxy bs
+
+-- }}}
+
 -- Tests {{{
 
 pInt  = Proxy :: Proxy Int
@@ -489,9 +501,6 @@ l3 = 4 :* False *: 'c'
 p3 = Proxy :: Proxy '[Int,Bool,Char]
 
 -- }}}
-
-class Entails i j where
-  entails :: i -> j
 
 -- }}}
 
