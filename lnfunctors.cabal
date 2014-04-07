@@ -16,8 +16,11 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Data.LnFunctor
                        Type.Families
-                       Control.LnMonad.Reader
-                       Control.LnMonad.Writer
+                       Control.LnMonad.List.Reader
+                       Control.LnMonad.List.Writer
+                       Control.LnMonad.List.State
+                       Control.LnMonad.List.RW
+                       -- Control.Infer
                        -- Data.Links
                        -- Data.LnFunctor.Empty
                        -- -- ->

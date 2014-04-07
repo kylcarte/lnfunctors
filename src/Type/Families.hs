@@ -1,3 +1,4 @@
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -21,6 +22,8 @@ module Type.Families
 
 import GHC.Exts (Constraint,IsList(..))
 import Data.Proxy
+import Data.Typeable
+import Data.List (stripPrefix)
 
 -- Free {{{
 
@@ -185,6 +188,41 @@ type family LAppend (a :: w) (b :: Pr w k) :: Pr w k where
 
 -- }}}
 
+-- Bool {{{
+
+type family a :|| b where
+  True  :|| b    = True
+  a     :|| True = True
+  False :|| b    = b
+
+type family a :&& b where
+  False :&& b     = False
+  a     :&& False = False
+  True  :&& b     = b
+
+type family Not a where
+  Not True  = False
+  Not False = True
+
+type family If t c a where
+  If True  c a = c
+  If False c a = a
+
+type family IfT t c x where
+  IfT True  c x = c x
+  IfT False c x = x
+
+type family IfF t a x where
+  IfF True  a x = x
+  IfF False a x = a x
+
+type t :=> a = If t X a
+infixr 4 :=>
+
+type X = (() :: Constraint)
+
+-- }}}
+
 -- Type Injection {{{
 
 type family a :~ b :: Bool where
@@ -200,6 +238,17 @@ type TNe a b = (EqImpl a b b a, (a :~ b) ~ False)
 data EqProof (e :: Bool) a b where
   Same  :: EqProof True a a
   Diff :: TNe a b => EqProof False a b
+
+type family AllEqTestable as bs :: Constraint where
+  AllEqTestable '[] bs = ()
+  AllEqTestable (a ': as) bs = (AllEqTestable_ a bs,AllEqTestable as bs)
+
+type family AllEqTestable_ a bs :: Constraint where
+  AllEqTestable_ a '[] = ()
+  AllEqTestable_ a (b ': bs) = (EqTestable a b,AllEqTestable_ a bs)
+
+class    EqTestable a b
+instance EqTest e a b => EqTestable a b
 
 class ((b :~ a) ~ e, (a :~ b) ~ e) => EqTest e a b where
   eqProof :: Proxy a -> Proxy b -> EqProof (a :~ b) a b
@@ -253,9 +302,65 @@ class TypeIxMonoid m => TypeIxMonoid1 (m :: k -> *) where
   type Munit m (a :: *) :: k
   tmunit :: a -> m (Munit m a)
 
+-- List {{{
+
 data List as where
   Nil  :: List '[]
   (:*) :: a -> List as -> List (a ': as)
+infixr 4 :*
+
+(*:) :: a -> b -> List '[a,b]
+a *: b = a :* b :* Nil
+infixr 4 *:
+
+type IsUnion a b c = (c ~ Union a b, IsSub a c, IsSub b c, AllInTestable a b)
+
+type family Union as bs where
+  Union '[] bs = bs
+  Union (a ': as) bs = IfF (CondIn a bs) ('(:) a) (Union as bs)
+
+union' :: AllInTestable bs as => List as -> List bs -> List (Union bs as)
+union' as bs = case bs of
+  Nil      -> as
+  (b :: b) :* bs' -> case inProof pb as of
+    InProof _ -> union' as bs'
+    NotIn     -> b :* union' as bs'
+    where
+    pb = Proxy :: Proxy b
+
+union :: AllInTestable as bs => List as -> List bs -> List (Union as bs)
+union as bs = case as of
+  Nil      -> bs
+  (a :: a) :* as' -> case inProof pa bs of
+    InProof _ -> union as' bs
+    NotIn     -> a :* union as' bs
+    where
+    pa = Proxy :: Proxy a
+
+-- Show {{{
+
+showTypeVal :: (Typeable a, Show a) => a -> ShowS
+showTypeVal a = shows a . showString " :: " . showsTypeRep (typeOf a)
+
+instance Show (List '[]) where
+  showsPrec d Nil = showParen (d > 5)
+    $ showString "List []"
+
+instance (Typeable a, Show a, Show (List as)) => Show (List (a ': as)) where
+  showsPrec d (a :* as) = showParen (d > 5)
+    $ showString "List ["
+    . showTypeVal a
+    . showRest
+    where
+    showRest = case as of
+      Nil -> showString "]"
+      _   -> case stripPrefix "List [" $ show as of
+        Just rest -> showString ", " . showString rest
+        _         -> error "badly shown List"
+
+-- }}}
+
+-- Monoid {{{
 
 instance TypeIxMonoid List where
   type MonoidKind List = ListK
@@ -267,4 +372,126 @@ instance TypeIxMonoid List where
 instance TypeIxMonoid1 List where
   type Munit List a = '[a]
   tmunit = (:* Nil)
+
+-- }}}
+
+-- In {{{
+
+data InProof (b :: Bool) a as where
+  InProof :: a -> InProof True a as
+  NotIn   :: InProof False a as
+
+instance Show a => Show (InProof b a as) where
+  showsPrec d (InProof a) = showParen (d > 5)
+    $ showString "InProof "
+    . shows a
+  showsPrec _ NotIn = showString "NotIn"
+
+type IsIn a as = (In a as, CondIn a as ~ True)
+
+type family AllInTestable as bs :: Constraint where
+  AllInTestable '[] bs = ()
+  AllInTestable (a ': as) bs = (In a bs,AllInTestable as bs)
+
+class In (a :: *) (as :: [*]) where
+  type CondIn a as :: Bool
+  inProof :: Proxy a -> List as -> InProof (CondIn a as) a as
+
+instance In a '[] where
+  type CondIn a '[] = False
+  inProof Proxy Nil = NotIn
+
+instance (EqTest eq a b, In a bs) => In a (b ': bs) where
+  type CondIn a (b ': bs) = (a :~ b) :|| CondIn a bs
+  inProof (pa :: Proxy a) ((b :: b) :* bs) = case eqProof pa pb of
+    Same -> InProof b
+    Diff -> case inProof pa bs of
+      InProof a -> InProof a
+      NotIn     -> NotIn
+    where
+    pb = Proxy :: Proxy b
+
+-- }}}
+
+-- Sub {{{
+
+data SubProof (b :: Bool) (as :: [*]) (bs :: [*]) where
+  SubProof :: (PartialSub as bs ~ as, CounterSub as bs ~ '[])
+    => List (PartialSub as bs) -> SubProof True as bs
+  NotSub   :: List (PartialSub as bs) -> List (CounterSub as bs)
+    -> SubProof False as bs
+  -- ^ List of counter examples
+
+instance Show (List as) => Show (SubProof b as bs) where
+  showsPrec d (SubProof as) = showParen (d > 5)
+    $ showString "SubProof "
+    . showsPrec 11 as
+  showsPrec d (NotSub _ _) = showString "NotSub"
+
+type IsSub as bs = (Sub as bs, CondSub as bs ~ True)
+
+class AllInTestable as bs => Sub (as :: [*]) (bs :: [*]) where
+  type CondSub as bs :: Bool
+  type PartialSub as bs :: [*]
+  type CounterSub as bs :: [*]
+  subProof :: Proxy as -> List bs -> SubProof (CondSub as bs) as bs
+
+instance Sub '[] bs where
+  type CondSub '[] bs = True
+  type PartialSub '[] bs = '[]
+  type CounterSub '[] bs = '[]
+  subProof Proxy bs = SubProof Nil
+
+instance (In a bs, Sub as bs) => Sub (a ': as) bs where
+  type CondSub (a ': as) bs = CondIn a bs :&& CondSub as bs
+  type PartialSub (a ': as) bs =
+    IfT (CondIn a bs)
+      ('(:) a) 
+      (PartialSub as bs)
+  type CounterSub (a ': as) bs =
+    IfF (CondIn a bs)
+      ('(:) (Proxy a))
+      (CounterSub as bs)
+  subProof (Proxy :: Proxy (a ': as)) bs = case subProof pas bs of
+    SubProof as  -> case i of
+      InProof a  -> SubProof (a :* as)
+      NotIn      -> NotSub as (pa :* Nil)
+    NotSub ys ns -> case i of
+      InProof a  -> NotSub (a :* ys) ns
+      NotIn      -> NotSub ys (pa :* ns)
+    where
+    pa  = Proxy :: Proxy a
+    pas = Proxy :: Proxy as
+    i   = inProof pa bs
+
+-- }}}
+
+-- Tests {{{
+
+pInt  = Proxy :: Proxy Int
+pBool = Proxy :: Proxy Bool
+pChar = Proxy :: Proxy Char
+
+l0 :: List '[]
+l0 = Nil
+p0 = Proxy :: Proxy '[]
+
+l1 :: List '[Int]
+l1 = 3 :* Nil
+p1 = Proxy :: Proxy '[Int]
+
+l2 :: List '[Int,Bool]
+l2 = 2 *: True
+p2 = Proxy :: Proxy '[Int,Bool]
+
+l3 :: List '[Int,Bool,Char]
+l3 = 4 :* False *: 'c'
+p3 = Proxy :: Proxy '[Int,Bool,Char]
+
+-- }}}
+
+class Entails i j where
+  entails :: i -> j
+
+-- }}}
 

@@ -63,17 +63,19 @@ class LnFunctor f => LnTerminal (f :: ix -> ix -> * -> *) where
   type Term f (i :: ix) (j :: ix) :: Constraint
 
 class LnFunctor f => LnJoin (f :: ix -> ix -> * -> *) where
-  type GatherUp   f (i :: ix) (j :: ix) :: Constraint
-  type GatherDown f (i :: ix) (j :: ix) :: Constraint
+  type JoinUp   f (i :: ix) (j :: ix) :: Constraint
+  type JoinDown f (i :: ix) (j :: ix) :: Constraint
 class LnFunctor f => LnSplit (f :: ix -> ix -> * -> *) where
   type SplitUp    f (i :: ix) (j :: ix) :: Constraint
   type SplitDown  f (i :: ix) (j :: ix) :: Constraint
 
+{-
 type Links  f i j k l = (LinkPar f i j k l,LinkSeq f i j k l)
 type family LinkPar (f :: ix -> ix -> * -> *) (i :: ix) (j :: ix) (k :: ix) (l :: ix) where
   LinkPar f i j k l = (LinkL f i k,LinkR f j l)
 type family LinkSeq (f :: ix -> ix -> * -> *) (i :: ix) (j :: ix) (k :: ix) (l :: ix) where
   LinkSeq f i j k l = LinkI f j k
+-}
 
 -- }}}
 
@@ -101,24 +103,26 @@ ivoid = (() <$)
 
 -- }}}
 
+type LinkPar f i j k l = (L f i k, R f j l)
+
 -- minimum definition: Link*, weaken and strengthen
 class IxFunctor f => LnFunctor (f :: ix -> ix -> * -> *) where
-  type LinkL f (i :: ix) (j :: ix) :: Constraint
-  type LinkR f (i :: ix) (j :: ix) :: Constraint
-  type LinkI f (i :: ix) (j :: ix) :: Constraint
-  weaken     :: LinkL f i j => f i k a -> f j k a
-  strengthen :: LinkR f i j => f k i a -> f k j a
+  type L f (i :: ix) (k :: ix) :: Constraint
+  type R f (j :: ix) (l :: ix) :: Constraint
+  weaken     :: L f i k => f i j a -> f k j a
+  strengthen :: R f j l => f i j a -> f i l a
   stretch    :: LinkPar f i j k l => f i j a -> f k l a
-  stretch = strengthen . weaken
+  stretch = weaken . strengthen 
   lmap  :: LinkPar f i j k l => (a -> b) -> f i j a -> f k l b
   lmap  f = stretch . imap f
   -- lmap constraining right indices to be equal
-  lmapL :: LinkL f i j => (a -> b) -> f i k a -> f j k b
+  lmapL :: L f i j => (a -> b) -> f i x a -> f j x b
   lmapL f = weaken . imap f
   -- lmap constraining left indices to be equal
-  lmapR :: LinkR f j k => (a -> b) -> f i j a -> f i k b
+  lmapR :: R f i j => (a -> b) -> f x i a -> f x j b
   lmapR f = strengthen . imap f
 
+{-
 (<$$>) :: (LnFunctor f, Links f i j k l) => (a -> b) -> f i j a -> f k l b
 (<$$>) = lmap
 infixl 4 <$$>
@@ -133,6 +137,7 @@ infixl 4 $$>
 
 lvoid :: (LnFunctor f, Links f i j k l) => f i j a -> f k l ()
 lvoid = (() <$$)
+-}
 
 -- }}}
 
@@ -159,6 +164,7 @@ ireturn = lreturn
 
 -- Apply {{{
 
+{-
 -- Index Restricted {{{
 
 iap :: (LnApply m, Trn Links m i j k) => m i j (a -> b) -> m j k a -> m i k b
@@ -181,16 +187,21 @@ iliftA3 :: (LnApply m, Trn Links m i j k, Trn Links m i k l)
 iliftA3 f a b c = f <$> a <*> b <*> c
 
 -- }}}
+-}
 
-class LnFunctor m => LnApply m where
-  lap :: (LinkL m i k, LinkR m j l, LinkI m j k) =>
-    m i j (a -> b) -> m k l a -> m i l b
 
-(<**>) :: (LnApply m, Links m i j k l)
-  => m i j (a -> b) -> m k l a -> m i l b
+class LnFunctor f => LnApply (f :: ix -> ix -> * -> *) where
+  type Link f (i :: ix) (j :: ix) (k :: ix) (l :: ix)
+    (h :: ix) (m :: ix) :: Constraint
+  lap :: Link f i j k l h m =>
+    f i j (a -> b) -> f k l a -> f h m b
+
+(<**>) :: (LnApply f, Link f i j k l h m)
+  => f i j (a -> b) -> f k l a -> f h m b
 (<**>) = lap
 infixl 4 <**>
 
+{-
 lliftA  :: (LnApply m, Links m i j k l) => (a -> b) -> m i j a -> m k l b
 lliftA = lmap
 
@@ -220,47 +231,51 @@ infixl 4 <**
   => m i j a -> m k l b -> m i l b
 (**>) = rthenR
 infixl 4 **>
+-}
 
 -- }}}
 
+{-
 -- Alt {{{
 
 -- Index Restricted {{{
 
-(<|>) :: (LnAlt m, Rfl GatherUp m i) => m i j a -> m i j a -> m i j a
+(<|>) :: (LnAlt m, Rfl JoinUp m i) => m i j a -> m i j a -> m i j a
 (<|>) = lbranchL
 
-(>|<) :: (LnAlt m, Rfl GatherDown m j) => m i j a -> m i j a -> m i j a
+(>|<) :: (LnAlt m, Rfl JoinDown m j) => m i j a -> m i j a -> m i j a
 (>|<) = lfunnelL
 
 -- }}}
 
 class (LnFunctor m, LnJoin m) => LnAlt m where
-  lbranchL :: GatherUp m i j => m i k a -> m j k a -> m i k a
-  lbranchR :: GatherUp m i j => m i k a -> m j k a -> m j k a
-  lfunnelL :: GatherDown m j k => m i j a -> m i k a -> m i j a
-  lfunnelR :: GatherDown m j k => m i j a -> m i k a -> m i k a
+  lbranchL :: JoinUp m i j => m i k a -> m j k a -> m i k a
+  lbranchR :: JoinUp m i j => m i k a -> m j k a -> m j k a
+  lfunnelL :: JoinDown m j k => m i j a -> m i k a -> m i j a
+  lfunnelR :: JoinDown m j k => m i j a -> m i k a -> m i k a
 
-(<<|>) :: (LnAlt m,GatherUp m i j) => m i k a -> m j k a -> m i k a
+(<<|>) :: (LnAlt m,JoinUp m i j) => m i k a -> m j k a -> m i k a
 (<<|>) = lbranchL
 infixl 3 <<|>
 
-(<|>>) :: (LnAlt m,GatherUp m i j) => m i k a -> m j k a -> m j k a
+(<|>>) :: (LnAlt m,JoinUp m i j) => m i k a -> m j k a -> m j k a
 (<|>>) = lbranchR
 infixl 3 <|>>
 
-(>>|<) :: (LnAlt m, GatherDown m j k) => m i j a -> m i k a -> m i j a
+(>>|<) :: (LnAlt m, JoinDown m j k) => m i j a -> m i k a -> m i j a
 (>>|<) = lfunnelL
 infixl 3 >>|<
 
-(>|<<) :: (LnAlt m, GatherDown m j k) => m i j a -> m i k a -> m i k a
+(>|<<) :: (LnAlt m, JoinDown m j k) => m i j a -> m i k a -> m i k a
 (>|<<) = lfunnelR
 infixl 3 >|<<
 
 -- }}}
+-}
 
 -- Bind {{{
 
+{-
 -- Index Restricted {{{
 
 ibind :: (LnBind m, Trn Links m i j k) => m i j a -> (a -> m j k b) -> m i k b
@@ -290,10 +305,12 @@ infixr 1 >=>
 infixr 1 <=<
 
 -- }}}
+-}
 
-class LnApply m => LnBind m where
-  lbind :: Links m i j k l => m i j a -> (a -> m k l b) -> m i l b
+class LnApply f => LnBind f where
+  lbind :: Link f i j k l h m => f i j a -> (a -> f k l b) -> f h m b
 
+{-
 ljoin :: (LnBind m, Links m i j k l) => m i j (m k l a) -> m i l a
 ljoin = flip lbind id
 
@@ -316,9 +333,11 @@ infixr 1 >>=>
 (<=<<) :: (LnBind m, Links m i j k l) => (b -> m k l c) -> (a -> m i j b) -> a -> m i l c
 (f <=<< g) x = g x >>>= f
 infixr 1 <=<<
+-}
 
 -- }}}
 
+{-
 -- Monad {{{
 
 -- Index Restricted {{{
@@ -421,6 +440,8 @@ m3 = lreturn ()
 
 -- }}}
 
+-}
+
 {-
 
 -- Copointed {{{
@@ -472,7 +493,6 @@ type family LinkEnds_ (f :: ix -> ix -> * -> *) (i :: ix) (ls :: [Pr ix ix]) :: 
 
 -- }}}
 
--}
 
 -- Test {{{
 
@@ -535,3 +555,4 @@ instance TrivI i j
 
 -- }}}
 
+-}
