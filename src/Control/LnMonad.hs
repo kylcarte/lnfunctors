@@ -19,7 +19,7 @@ import Data.LnFunctor.Bind
 import Data.LnFunctor.Empty
 import Data.LnFunctor.Plus
 
-type LnMonad m = (LnPointed m, LnBind m)
+type LnMonad f = (LnPointed f, LnBind f)
 
 {-
 -- LnMonad {{{

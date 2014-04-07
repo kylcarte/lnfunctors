@@ -16,21 +16,20 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Data.LnFunctor
                        Type.Families
-                       Control.LnMonad.List.Reader
-                       Control.LnMonad.List.Writer
-                       Control.LnMonad.List.State
-                       Control.LnMonad.List.RW
-                       -- Control.Infer
-                       -- Data.Links
-                       -- Data.LnFunctor.Empty
+                       Data.LnFunctor.Empty
+                       -- Control.LnMonad.List.Reader
+                       -- Control.LnMonad.List.Writer
+                       -- Control.LnMonad.List.State
+                       -- Control.LnMonad.List.RW
+                       -- Control.LnMonad.Infer
                        -- -- ->
-                       -- Data.LnFunctor.Pointed
-                       -- Data.LnFunctor.Apply
-                       -- Data.LnFunctor.Alt
-                       -- Data.LnFunctor.Bind
+                       Data.LnFunctor.Pointed
+                       Data.LnFunctor.Apply
+                       Data.LnFunctor.Alt
+                       Data.LnFunctor.Bind
                        -- Data.LnFunctor.Plus
                        -- -- <-
-                       -- Data.LnFunctor.Copointed
+                       Data.LnFunctor.Copointed
                        -- Data.LnFunctor.Coapply
                        -- Data.LnFunctor.Coalt
                        -- Data.LnFunctor.Extend

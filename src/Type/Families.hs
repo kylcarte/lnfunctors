@@ -25,6 +25,30 @@ import Data.Proxy
 import Data.Typeable
 import Data.List (stripPrefix)
 
+asProxy :: f a -> Proxy a
+asProxy _ = Proxy
+
+type Rfl
+  (c :: k -> ix -> ix -> l)
+  (f :: k)
+  (i :: ix)
+  = c f i i
+
+type Trn
+  (c :: l -> ix -> ix -> ix -> ix -> m)
+  (f :: l)
+  (i :: ix)
+  (j :: ix)
+  (k :: ix)
+  = c f i j j k
+
+type Sym
+  (c :: k -> ix -> ix -> Constraint)
+  (f :: k)
+  (i :: ix)
+  (j :: ix)
+  = ((c f i j, c f j i) :: Constraint)
+
 -- Free {{{
 
 -- Imposes no constrictions, provides no assistance
@@ -75,6 +99,12 @@ type family Second (f :: k -> m) (p :: Pr l k) :: Pr l m where
 type family as :++ bs where
   '[] :++ bs       = bs
   (a ': as) :++ bs = a ': (as :++ bs)
+infixr 4 :++
+
+(++:) :: List as -> List bs -> List (as :++ bs)
+as ++: bs = case as of
+  Nil      -> bs
+  a :& as' -> a :& (as' ++: bs)
 
 type family Concat (ls :: [[k]]) :: [k] where
   Concat '[]       = '[]
@@ -221,6 +251,79 @@ infixr 4 :=>
 
 type X = (() :: Constraint)
 
+data B (b :: Bool) where
+  BT :: B True
+  BF :: B False
+
+class Boolean b where
+  bool :: Proxy b -> B b
+
+instance Boolean True where
+  bool Proxy = BT
+
+instance Boolean False where
+  bool Proxy = BF
+
+-- }}}
+
+-- Nat {{{
+
+data Nat
+  = Z
+  | S Nat
+  deriving (Eq,Show)
+
+data N (x :: Nat) where
+  NZ :: N Z
+  NS :: N x -> N (S x)
+
+class Natural x where
+  nat :: Proxy x -> N x
+  nVal :: N x -> Int
+
+instance Natural Z where
+  nat Proxy = NZ
+  nVal NZ = 0
+
+instance Natural x => Natural (S x) where
+  nat Proxy = NS $ nat Proxy
+  nVal (NS n) = 1 + nVal n
+
+type family a :+ b where
+  Z   :+ b = b
+  S a :+ b = S (a :+ b)
+infixr 4 :+
+
+(+:) :: N a -> N b -> N (a :+ b)
+a +: b = case a of
+  NZ    -> b
+  NS a' -> NS $ a' +: b
+infixr 4 +:
+
+type family a :* b where
+  Z   :* b = Z
+  S a :* b = b :+ (a :* b)
+infixr 5 :*
+
+(*:) :: N a -> N b -> N (a :* b)
+a *: b = case a of
+  NZ    -> NZ
+  NS a' -> b +: (a' *: b)
+infixr 5 *:
+
+type family Fact a where
+  Fact Z     = S Z
+  Fact (S a) = S a :* Fact a
+
+fact :: N a -> N (Fact a)
+fact a = case a of
+  NZ    -> NS NZ
+  NS a' -> a *: fact a'
+
+data (a :: Nat) :<= (b :: Nat) where
+  LeN :: a :<= a
+  LeS :: a :<= b -> a :<= S b
+
 -- }}}
 
 -- Type Injection {{{
@@ -306,12 +409,12 @@ class TypeIxMonoid m => TypeIxMonoid1 (m :: k -> *) where
 
 data List as where
   Nil  :: List '[]
-  (:*) :: a -> List as -> List (a ': as)
-infixr 4 :*
+  (:&) :: a -> List as -> List (a ': as)
+infixr 4 :&
 
-(*:) :: a -> b -> List '[a,b]
-a *: b = a :* b :* Nil
-infixr 4 *:
+(&:) :: a -> b -> List '[a,b]
+a &: b = a :& b :& Nil
+infixr 4 &:
 
 type IsUnion a b c = (c ~ Union a b, IsSub a c, IsSub b c, AllInTestable a b)
 
@@ -322,18 +425,18 @@ type family Union as bs where
 union' :: AllInTestable bs as => List as -> List bs -> List (Union bs as)
 union' as bs = case bs of
   Nil      -> as
-  (b :: b) :* bs' -> case inProof pb as of
+  (b :: b) :& bs' -> case inProof pb as of
     InProof _ -> union' as bs'
-    NotIn     -> b :* union' as bs'
+    NotIn     -> b :& union' as bs'
     where
     pb = Proxy :: Proxy b
 
 union :: AllInTestable as bs => List as -> List bs -> List (Union as bs)
 union as bs = case as of
   Nil      -> bs
-  (a :: a) :* as' -> case inProof pa bs of
+  (a :: a) :& as' -> case inProof pa bs of
     InProof _ -> union as' bs
-    NotIn     -> a :* union as' bs
+    NotIn     -> a :& union as' bs
     where
     pa = Proxy :: Proxy a
 
@@ -347,7 +450,7 @@ instance Show (List '[]) where
     $ showString "List []"
 
 instance (Typeable a, Show a, Show (List as)) => Show (List (a ': as)) where
-  showsPrec d (a :* as) = showParen (d > 5)
+  showsPrec d (a :& as) = showParen (d > 5)
     $ showString "List ["
     . showTypeVal a
     . showRest
@@ -367,11 +470,11 @@ instance TypeIxMonoid List where
   tmempty  = Nil
   tmappend as bs = case as of
     Nil      -> bs
-    a :* as' -> a :* tmappend as' bs
+    a :& as' -> a :& tmappend as' bs
 
 instance TypeIxMonoid1 List where
   type Munit List a = '[a]
-  tmunit = (:* Nil)
+  tmunit = (:& Nil)
 
 -- }}}
 
@@ -403,7 +506,7 @@ instance In a '[] where
 
 instance (EqTest eq a b, In a bs) => In a (b ': bs) where
   type CondIn a (b ': bs) = (a :~ b) :|| CondIn a bs
-  inProof (pa :: Proxy a) ((b :: b) :* bs) = case eqProof pa pb of
+  inProof (pa :: Proxy a) ((b :: b) :& bs) = case eqProof pa pb of
     Same -> InProof b
     Diff -> case inProof pa bs of
       InProof a -> InProof a
@@ -454,11 +557,11 @@ instance (In a bs, Sub as bs) => Sub (a ': as) bs where
       (CounterSub as bs)
   subProof (Proxy :: Proxy (a ': as)) bs = case subProof pas bs of
     SubProof as  -> case i of
-      InProof a  -> SubProof (a :* as)
-      NotIn      -> NotSub as (pa :* Nil)
+      InProof a  -> SubProof (a :& as)
+      NotIn      -> NotSub as (pa :& Nil)
     NotSub ys ns -> case i of
-      InProof a  -> NotSub (a :* ys) ns
-      NotIn      -> NotSub ys (pa :* ns)
+      InProof a  -> NotSub (a :& ys) ns
+      NotIn      -> NotSub ys (pa :& ns)
     where
     pa  = Proxy :: Proxy a
     pas = Proxy :: Proxy as
@@ -489,15 +592,15 @@ l0 = Nil
 p0 = Proxy :: Proxy '[]
 
 l1 :: List '[Int]
-l1 = 3 :* Nil
+l1 = 3 :& Nil
 p1 = Proxy :: Proxy '[Int]
 
 l2 :: List '[Int,Bool]
-l2 = 2 *: True
+l2 = 2 &: True
 p2 = Proxy :: Proxy '[Int,Bool]
 
 l3 :: List '[Int,Bool,Char]
-l3 = 4 :* False *: 'c'
+l3 = 4 :& False &: 'c'
 p3 = Proxy :: Proxy '[Int,Bool,Char]
 
 -- }}}

@@ -4,15 +4,12 @@
 module Data.LnFunctor.Empty where
 
 import Data.LnFunctor
-import Data.IxFunctor.Empty (IxEmpty)
-import qualified Data.IxFunctor.Empty as I
+import Type.Families (Rfl)
 
-type LnEmpty m = WithLink IxEmpty m
-type EmptyLinks m ijs = Links IxEmpty m ijs
+class (LnFunctor f, LnInitial f) => LnEmpty f where
+  lempty :: Init f i j => f i j a
 
-{-
-
-  iempty :: f i i a
-
--}
+iempty :: (LnEmpty f, Rfl Init f i)
+  => f i i a
+iempty = lempty
 

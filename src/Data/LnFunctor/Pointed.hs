@@ -4,16 +4,11 @@
 module Data.LnFunctor.Pointed where
 
 import Data.LnFunctor
-import Data.IxFunctor.Pointed (IxPointed)
-import qualified Data.IxFunctor.Pointed as I
+import Type.Families (Rfl)
 
-type LnPointed m = WithLink IxPointed m
-type PointedLinks m ijs = Links IxPointed m ijs
+class (LnFunctor f, LnInitial f) => LnPointed (f :: ix -> ix -> * -> *) where
+  lreturn :: Init f i j => a -> f i j a
 
-{-
-
-class IxFunctor m => IxPointed m where
-  ireturn :: a -> m i i a
-
--}
+ireturn :: (LnPointed f, Rfl Init f i) => a -> f i i a
+ireturn = lreturn
 
