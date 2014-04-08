@@ -15,8 +15,7 @@ module Control.LnMonad.Infer where
 import Data.LnFunctor
 import Data.LnFunctor.Apply
 import Data.LnFunctor.Bind
-import Data.LnFunctor.Copointed
-import Data.LnFunctor.Coapply
+import Control.LnApplicative
 import Type.Families
 import Data.Proxy
 import Control.Arrow (first)
@@ -54,6 +53,9 @@ instance LnApply Infer where
       where
       (lj,f) = fij   li
       (ll,a) = akl $ union li lj
+
+instance LnApplicative Infer where
+  lpure a = Infer $ \li -> (sub li,a)
 
 instance LnBind Infer where
   lbind (Infer (aij :: List i -> (List j,a)))
