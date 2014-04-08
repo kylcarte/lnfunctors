@@ -13,58 +13,61 @@
 module Control.LnMonad.List.Reader where
 
 import Data.LnFunctor
+import Data.LnFunctor.Apply
+import Data.LnFunctor.Bind
+import Control.LnApplicative
 import Type.Families
 import Data.Proxy
 
-newtype ReaderLn
+newtype LReader
   (i :: [*])
   (j :: [*])
-  (a :: *) = ReaderLn
-  { unReaderLn :: List i -> a
+  (a :: *) = LReader
+  { unLReader :: List i -> a
   }
 
-instance IxFunctor ReaderLn where
-  imap f (ReaderLn mi) = ReaderLn $ f . mi
+instance IxFunctor LReader where
+  imap f (LReader mi) = LReader $ f . mi
 
-instance LnFunctor ReaderLn where
-  type L ReaderLn i k = IsSub i k
-  type R ReaderLn j l = ()
-  weaken (ReaderLn (m :: List i -> a)) = ReaderLn $ \lk ->
+instance LnFunctor LReader where
+  type L LReader i k = IsSub i k
+  type R LReader j l = ()
+  weaken (LReader (m :: List i -> a)) = LReader $ \lk ->
     case subProof (Proxy :: Proxy i) lk of
       SubProof li -> m li
-  strengthen (ReaderLn m) = ReaderLn m
+  strengthen (LReader m) = LReader m
   lmap f = imap f . stretch
 
-instance LnInitial ReaderLn where
-  type Init ReaderLn i j = ()
+instance LnInitial LReader where
+  type Init LReader i j = ()
 
-instance LnPointed ReaderLn where
-  lreturn = ReaderLn . const
-
-instance LnApply ReaderLn where
-  type Link ReaderLn i j k l h m =
+instance LnApply LReader where
+  type Link LReader i j k l h m =
     (IsSub i h, IsSub k h)
-  lap (ReaderLn (fi :: List i -> a -> b)) (ReaderLn (ak :: List k -> a))
-    = ReaderLn $ \lh -> case (subProof pi lh,subProof pk lh) of
+  lap (LReader (fi :: List i -> a -> b)) (LReader (ak :: List k -> a))
+    = LReader $ \lh -> case (subProof pi lh,subProof pk lh) of
       (SubProof li,SubProof lk) -> fi li $ ak lk
     where
     pi = Proxy :: Proxy i
     pk = Proxy :: Proxy k
 
-instance LnBind ReaderLn where
-  lbind (ReaderLn (ai :: List i -> a)) (fk :: a -> ReaderLn k l b)
-    = ReaderLn $ \lh -> case (subProof pi lh,subProof pk lh) of
-      (SubProof li,SubProof lk) -> unReaderLn (fk $ ai li) lk
+instance LnApplicative LReader where
+  lpure = LReader . const
+
+instance LnBind LReader where
+  lbind (LReader (ai :: List i -> a)) (fk :: a -> LReader k l b)
+    = LReader $ \lh -> case (subProof pi lh,subProof pk lh) of
+      (SubProof li,SubProof lk) -> unLReader (fk $ ai li) lk
     where
     pi = Proxy :: Proxy i
     pk = Proxy :: Proxy k
 
-ask :: ReaderLn i i (List i)
-ask = ReaderLn $ \li -> li
+ask :: LReader i i (List i)
+ask = LReader $ \li -> li
 
-local :: (List i -> List k) -> ReaderLn k l a -> ReaderLn i l a
-local f (ReaderLn ak) = ReaderLn $ ak . f
+local :: (List i -> List k) -> LReader k l a -> LReader i l a
+local f (LReader ak) = LReader $ ak . f
 
-reader :: (List i -> a) -> ReaderLn i j a
-reader = ReaderLn
+reader :: (List i -> a) -> LReader i j a
+reader = LReader
 
