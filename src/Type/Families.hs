@@ -531,7 +531,7 @@ instance Show (List as) => Show (SubProof b as bs) where
     . showsPrec 11 as
   showsPrec d (NotSub _ _) = showString "NotSub"
 
-type IsSub as bs = (Sub as bs, CondSub as bs ~ True)
+type IsSub as bs = (Sub as bs, CondSub as bs ~ True, AllInTestable as bs)
 
 class AllInTestable as bs => Sub (as :: [*]) (bs :: [*]) where
   type CondSub as bs :: Bool
@@ -566,6 +566,12 @@ instance (In a bs, Sub as bs) => Sub (a ': as) bs where
     pa  = Proxy :: Proxy a
     pas = Proxy :: Proxy as
     i   = inProof pa bs
+
+sub :: forall i j. IsSub i j => List j -> List i
+sub lj = case subProof (Proxy :: Proxy i) lj of
+  SubProof li -> li
+
+type SetEq as bs = (IsSub as bs,IsSub bs as)
 
 -- }}}
 

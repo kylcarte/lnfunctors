@@ -1,44 +1,50 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PolyKinds #-}
 
 module Data.LnFunctor.Coapply where
 
 import Data.LnFunctor
-import Data.IxFunctor.Coapply (IxCoapply)
-import qualified Data.IxFunctor.Coapply as I
 
-type LnCoapply m = WithLink IxCoapply m
-type CoapplyLinks m ijs = Links IxCoapply m ijs
+class LnFunctor f => LnCoapply f where
+  type Unlink f h m k l i j :: Constraint
+  lcoap :: Unlink f h m k l i j => f h m (a -> b) -> f k l a -> f i j b
 
-{-
-
-icothenL :: IxCoapply w => w j k a -> w i k b -> w i j a
-icothenL = iliftCA2 const
-
-icothenR :: IxCoapply w => w j k a -> w i k b -> w i j b
-icothenR = iliftCA2 (const id)
-
-(<@@>) :: IxCoapply w => w j k (a -> b) -> w i k a -> w i j b
-(<@@>) = icoap
+(<@@>) :: (LnCoapply f, Unlink f h m k l i j)
+  => f h m (a -> b) -> f k l a -> f i j b
+(<@@>) = lcoap
 infixl 4 <@@>
 
-(<@@) :: IxCoapply w => w j k a -> w i k b -> w i j a
-(<@@) = icothenL
+(<@@) :: (LnCoapply f, Unlink f h m k l i j) => f h m a -> f k l b -> f i j a
+(<@@) = lcothenL
 infixl 4 <@@
 
-(@@>) :: IxCoapply w => w j k a -> w i k b -> w i j b
-(@@>) = icothenR
+(@@>) :: (LnCoapply f, Unlink f h m k l i j) => f h m a -> f k l b -> f i j b
+(@@>) = lcothenR
 infixl 4 @@>
 
-iliftCA :: IxCoapply w => (a -> b) -> w i j a -> w i j b
-iliftCA = (<$$>)
+lcothenL :: (LnCoapply f, Unlink f h m k l i j) => f h m a -> f k l b -> f i j a
+lcothenL = lliftCA2 const
 
-iliftCA2  :: IxCoapply w => (a -> b -> c) -> w j k a -> w i k b -> w i j c
-iliftCA2 f a b = f <$$> a <@@> b
+lcothenR :: (LnCoapply f, Unlink f h m k l i j) => f h m a -> f k l b -> f i j b
+lcothenR = lliftCA2 (const id)
 
-iliftCA3 :: IxCoapply w => (a -> b -> c -> d)
-  -> w k l a -> w j l b -> w i k c -> w i j d
-iliftCA3 f a b c = f <$$> a <@@> b <@@> c
+lliftCA :: (LnCoapply f,LinkPar f i j k l) => (a -> b) -> f i j a -> f k l b
+lliftCA = (<$$>)
 
--}
+lliftCA2  :: (LnCoapply f, Unlink f h m k l i j) => (a -> b -> c) -> f h m a -> f k l b -> f i j c
+lliftCA2 f a b = f <$> a <@@> b
+
+lliftCA3 :: forall f a b c d h i j k l m n o p q.
+  (LnCoapply f, Unlink f h m k l i j, Unlink f p q n o h m)
+  => (a -> b -> c -> d)
+  -> f p q a -> f n o b -> f k l c -> f i j d
+lliftCA3 f a b c = fab <@@> c
+  where
+  fa :: f p q (b -> c -> d)
+  fa = f <$> a
+  fab :: f h m (c -> d)
+  fab = fa <@@> b
 
