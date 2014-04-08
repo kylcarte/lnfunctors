@@ -13,6 +13,10 @@
 module Control.LnMonad.List.State where
 
 import Data.LnFunctor
+import Data.LnFunctor.Apply
+import Data.LnFunctor.Bind
+import Control.LnApplicative
+import Control.LnMonad
 import Type.Families
 import Data.Proxy
 import Control.Arrow (first)
@@ -49,9 +53,6 @@ instance LnFunctor StateLn where
 instance LnInitial StateLn where
   type Init StateLn i j = i ~ j
 
-instance LnPointed StateLn where
-  lreturn a = StateLn $ \li -> (li,a)
-
 instance LnApply StateLn where
   type Link StateLn i j k l h m =
     ( IsSub i h
@@ -75,6 +76,9 @@ instance LnApply StateLn where
       pi = Proxy :: Proxy i
       pk = Proxy :: Proxy k
       pm = Proxy :: Proxy m
+
+instance LnApplicative StateLn where
+  lpure a = StateLn $ \li -> (li,a)
 
 instance LnBind StateLn where
   lbind (StateLn (ai :: List i -> (List j,a)))

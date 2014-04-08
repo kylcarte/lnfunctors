@@ -1,68 +1,25 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module Control.LnMonad
-  ( module Control.LnMonad
-  -- Convenience Reexports
-  , module Data.LnFunctor.Pointed
-  , module Data.LnFunctor.Bind
-  , module Data.LnFunctor.Empty
-  , module Data.LnFunctor.Plus
-  ) where
+module Control.LnMonad where
 
--- LnMonad
-import Data.LnFunctor.Pointed
-import Data.LnFunctor.Apply
+import Data.LnFunctor
 import Data.LnFunctor.Bind
-
--- LnMonadPlus
-import Data.LnFunctor.Empty
 import Data.LnFunctor.Plus
+import Control.LnApplicative
+import Prelude hiding (return)
 
-type LnMonad f = (LnPointed f, LnBind f)
+type LnMonad f = (LnApplicative f, LnBind f)
 
-{-
--- LnMonad {{{
+lreturn :: (LnMonad f, Init f i j) => a -> f i j a
+lreturn = lpure
 
-iapLnMonad :: LnMonad m => m i j (a -> b) -> m j k a -> m i k b
-iapLnMonad f x = f >>>= \f' -> x >>>= \x' -> ireturn (f' x')
+return :: (LnMonad f, Init f i i) => a -> f i i a
+return = lreturn
 
-iliftM :: LnMonad m => (a -> b) -> m i j a -> m i j b
-iliftM = iliftA
+class (LnMonad f, LnPlus f) => LnMonadPlus f where
+  lzero :: Init f i j => f i j a
 
-iliftM2 :: LnMonad m => (a -> b -> c) -> m i j a -> m j k b -> m i k c
-iliftM2 = iliftA2
-
-iliftM3 :: LnMonad m => (a -> b -> c -> d)
-  -> m i j a -> m j k b -> m k l c -> m i l d
-iliftM3 = iliftA3
-
-isequence :: LnMonad m => [m i i a] -> m i i [a]
-isequence = foldr (iliftM2 (:)) $ ireturn []
-
-imapM :: LnMonad m => (a -> m i i b) -> [a] -> m i i [b]
-imapM f = isequence . map f
-
-isequence_ :: LnMonad m => [m i i a] -> m i i ()
-isequence_ = foldr (>>>) $ ireturn ()
-
-imapM_ :: LnMonad m => (a -> m i i b) -> [a] -> m i i ()
-imapM_ f = isequence_ . map f
-
--- }}}
--}
-
-type LnMonadPlus m = (LnMonad m, LnPlus m)
-
-{-
--- LnMonadPlus {{{
-
-imzero :: LnMonadPlus m => m i i a
-imzero = iempty
-
-implus :: LnMonadPlus m => m i j a -> m i j a -> m i j a
-implus = ialt
-
--- }}}
--}
+mzero :: (LnMonadPlus f, Init f i i) => f i i a
+mzero = lzero
 

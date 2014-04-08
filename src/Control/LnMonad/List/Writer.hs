@@ -13,25 +13,27 @@
 module Control.LnMonad.List.Writer where
 
 import Data.LnFunctor
+import Data.LnFunctor.Apply
+import Data.LnFunctor.Bind
+import Control.LnApplicative
 import Type.Families
 import Data.Proxy
-import Control.Arrow (first)
 
-newtype WriterLn
+newtype LWriter
   (i :: [*])
   (j :: [*])
-  (a :: *) = WriterLn
-  { unWriterLn :: (List j,a)
+  (a :: *) = LWriter
+  { unLWriter :: (List j,a)
   }
 
-instance IxFunctor WriterLn where
-  imap f (WriterLn m) = WriterLn $ fmap f m
+instance IxFunctor LWriter where
+  imap f (LWriter m) = LWriter $ fmap f m
 
-instance LnFunctor WriterLn where
-  type L WriterLn i k = ()
-  type R WriterLn j l = IsSub l j
-  weaken (WriterLn p) = WriterLn p
-  strengthen (WriterLn (lj,a) :: WriterLn i j a) = WriterLn go
+instance LnFunctor LWriter where
+  type L LWriter i k = ()
+  type R LWriter j l = IsSub l j
+  weaken (LWriter p) = LWriter p
+  strengthen (LWriter (lj,a) :: LWriter i j a) = LWriter go
     where
     go :: forall l. IsSub l j => (List l,a)
     go = case subProof pl lj of
@@ -39,43 +41,43 @@ instance LnFunctor WriterLn where
       where
       pl = Proxy :: Proxy l
 
-instance LnInitial WriterLn where
-  type Init WriterLn i j = j ~ '[]
+instance LnInitial LWriter where
+  type Init LWriter i j = j ~ '[]
 
-instance LnPointed WriterLn where
-  lreturn a = WriterLn (Nil,a)
+instance LnApply LWriter where
+  type Link LWriter i j k l h m = IsUnion j l m
+  lap (LWriter ((lj :: List j),(f :: a -> b)))
+      (LWriter ((ll :: List l),(a :: a)))
+    = LWriter (union lj ll,f a)
 
-instance LnApply WriterLn where
-  type Link WriterLn i j k l h m = IsUnion j l m
-  lap (WriterLn ((lj :: List j),(f :: a -> b)))
-      (WriterLn ((ll :: List l),(a :: a)))
-    = WriterLn (union lj ll,f a)
+instance LnApplicative LWriter where
+  lpure a = LWriter (Nil,a)
 
-instance LnBind WriterLn where
-  lbind (WriterLn ((lj :: List j),(a :: a)))
-        (f :: a -> WriterLn k l b)
-    = WriterLn go
+instance LnBind LWriter where
+  lbind (LWriter ((lj :: List j),(a :: a)))
+        (f :: a -> LWriter k l b)
+    = LWriter go
     where
     go :: forall m. IsUnion j l m => (List m,b)
     go = (union lj ll,b)
       where
-      WriterLn (ll,b) = f a
+      LWriter (ll,b) = f a
 
-writer :: (List j,a) -> WriterLn i j a
-writer = WriterLn
+writer :: (List j,a) -> LWriter i j a
+writer = LWriter
 
-tell :: List j -> WriterLn i j ()
-tell lj = WriterLn (lj,())
+tell :: List j -> LWriter i j ()
+tell lj = LWriter (lj,())
 
-listen :: WriterLn i j a -> WriterLn i j (List j,a)
-listen (WriterLn p@(lj,a)) = WriterLn (lj,p)
+listen :: LWriter i j a -> LWriter i j (List j,a)
+listen (LWriter p@(lj,a)) = LWriter (lj,p)
 
-listens :: (List j -> b) -> WriterLn i j a -> WriterLn i j (a,b)
-listens f (WriterLn (lj,a)) = WriterLn (lj,(a,f lj))
+listens :: (List j -> b) -> LWriter i j a -> LWriter i j (a,b)
+listens f (LWriter (lj,a)) = LWriter (lj,(a,f lj))
 
-pass :: WriterLn i j (a,List j -> List k) -> WriterLn i k a
-pass (WriterLn (lj,(a,f))) = WriterLn (f lj,a)
+pass :: LWriter i j (a,List j -> List k) -> LWriter i k a
+pass (LWriter (lj,(a,f))) = LWriter (f lj,a)
 
-censor :: (List j -> List k) -> WriterLn i j a -> WriterLn i k a
-censor f (WriterLn (lj,a)) = WriterLn (f lj,a)
+censor :: (List j -> List k) -> LWriter i j a -> LWriter i k a
+censor f (LWriter (lj,a)) = LWriter (f lj,a)
 

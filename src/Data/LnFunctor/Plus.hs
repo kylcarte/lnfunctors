@@ -1,12 +1,18 @@
+{-# LANGUAGE ConstrainedClassMethods #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PolyKinds #-}
 
 module Data.LnFunctor.Plus where
 
 import Data.LnFunctor
-import Data.IxFunctor.Plus (IxPlus)
-import qualified Data.IxFunctor.Plus as I
 
-type LnPlus m = (IxPlus m, LnFunctor m)
-type PlusLinks m ijs = (IxPlus m, LinksTo  m ijs)
+class LnFunctor f => LnPlus f where
+  type Plus f i j k l h m :: Constraint
+  lplus :: Plus f i j k l h m => f i j a -> f k l a -> f h m a
+
+type IPlus f i j = Plus f i j i j i j
+
+iplus :: (LnPlus f, IPlus f i j) => f i j a -> f i j a -> f i j a
+iplus = lplus
 

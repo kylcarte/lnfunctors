@@ -1,12 +1,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module Control.LnApplicative
-  ( module Control.LnApplicative
-  -- Convenience Reexports
-  , module Data.LnFunctor.Apply
-  , module Data.LnFunctor.Alt
-  ) where
+module Control.LnApplicative where
 
 import Data.LnFunctor
 import Data.LnFunctor.Apply

@@ -13,6 +13,10 @@
 module Control.LnMonad.List.RW where
 
 import Data.LnFunctor
+import Data.LnFunctor.Apply
+import Data.LnFunctor.Bind
+import Control.LnApplicative
+import Control.LnMonad
 import Type.Families
 import Control.Arrow (first)
 import Data.Proxy
@@ -46,6 +50,7 @@ instance LnFunctor RW where
 instance LnInitial RW where
   type Init RW i j = IsSub j i
 
+{-
 instance LnPointed RW where
   lreturn (a :: a) = RW go
     where
@@ -54,6 +59,7 @@ instance LnPointed RW where
       SubProof lj -> (lj,a)
       where
       pj = Proxy :: Proxy j
+-}
 
 instance LnApply RW where
   type Link RW i j k l h m =
@@ -74,6 +80,15 @@ instance LnApply RW where
       where
       pi = Proxy :: Proxy i
       pm = Proxy :: Proxy m
+
+instance LnApplicative RW where
+  lpure (a :: a) = RW go
+    where
+    go :: forall i j. Sub j i => List i -> (List j,a)
+    go li = case subProof pj li of
+      SubProof lj -> (lj,a)
+      where
+      pj = Proxy :: Proxy j
 
 instance LnBind RW where
   lbind (RW (ai :: List i -> (List j,a)))
