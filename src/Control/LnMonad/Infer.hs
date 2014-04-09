@@ -17,7 +17,6 @@ import Data.LnFunctor.Apply
 import Data.LnFunctor.Bind
 import Control.LnApplicative
 import Type.Families
-import Data.Proxy
 import Control.Arrow (first)
 
 data Eqv a b where

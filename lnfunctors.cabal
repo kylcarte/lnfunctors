@@ -15,6 +15,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Data.LnFunctor
+                       Data.LnFunctor.Mono
                        Type.Families
                        -- Type.Witness
                        -- ->
@@ -39,10 +40,12 @@ library
                        Control.LnMonad.List.State
                        Control.LnMonad.List.RW
                        Control.LnMonad.Infer
+                       Control.LnMonad.Focus
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base -any,
-                       containers -any
+                       lens -any,
+                       ghc-prim -any
   hs-source-dirs:      src
   default-language:    Haskell2010
 
